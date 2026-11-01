@@ -30,6 +30,13 @@ jobs:
         run: |
           npm install --prefix "${RUNNER_TEMP}/rea-tool" --no-audit --no-fund --ignore-scripts --save-exact rea-agents@6.7.0
           echo "${RUNNER_TEMP}/rea-tool/node_modules/.bin" >> "${GITHUB_PATH}"
+      - name: Verify installed REA executable and MCP build
+        shell: bash
+        run: |
+          set -euo pipefail
+          rea --version
+          test -s "${RUNNER_TEMP}/rea-tool/node_modules/rea-agents/dist/mcp/main.js"
+          test -s "${RUNNER_TEMP}/rea-tool/node_modules/rea-agents/dist/cli-runtime/cli.js"
       - name: Build a known artifact
         id: build
         run: |
