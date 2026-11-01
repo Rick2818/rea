@@ -56,6 +56,9 @@ jobs:
           status=$?
           set -e
           printf '%s\n' "${status}" > "${REPORT_DIR}/exit-code.txt"
+          if [ "${status}" -eq 0 ]; then
+            node -e 'const fs=require("node:fs"); const report=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); if (!report || typeof report !== "object" || Array.isArray(report) || !Object.keys(report).length) process.exit(1)' "${REPORT_DIR}/analysis.json"
+          fi
           exit "${status}"
       - name: Upload available reports, including after analysis failure
         if: ${{ always() && steps.reports.outputs.directory != '' }}
