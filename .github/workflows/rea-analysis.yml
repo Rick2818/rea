@@ -41,6 +41,45 @@ jobs:
           rea --version
           test -s "${RUNNER_TEMP}/rea-tool/node_modules/rea-agents/dist/mcp/main.js"
           test -s "${RUNNER_TEMP}/rea-tool/node_modules/rea-agents/dist/cli-runtime/cli.js"
+      - name: MCP stdio handshake and tool discovery
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { spawn } from 'node:child_process';
+          const child = spawn('rea', ['mcp'], { stdio: ['pipe', 'pipe', 'pipe'] });
+          let buffer = '';
+          let stderr = '';
+          let initialized = false;
+          let timer = setTimeout(() => fail('MCP handshake timeout'), 25000);
+          child.stderr.on('data', d => { stderr += String(d).slice(0, 2000); });
+          child.on('error', e => fail(String(e)));
+          child.on('exit', code => { if (!initialized) fail('MCP exited: ' + code + ' ' + stderr); });
+          child.stdout.on('data', chunk => {
+            buffer += chunk.toString();
+            while (buffer.includes('\n')) {
+              const line = buffer.slice(0, buffer.indexOf('\n')).trim();
+              buffer = buffer.slice(buffer.indexOf('\n') + 1);
+              if (!line) continue;
+              let msg;
+              try { msg = JSON.parse(line); } catch { return fail('Non-JSON MCP response'); }
+              if (msg.id === 1) {
+                if (msg.error || !msg.result?.capabilities) return fail('initialize failed');
+                send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+                send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
+              }
+              if (msg.id === 2) {
+                if (msg.error || !Array.isArray(msg.result?.tools) || msg.result.tools.length === 0) return fail('tools/list failed');
+                initialized = true;
+                clearTimeout(timer);
+                console.log('MCP initialized; tools available:', msg.result.tools.length);
+                child.kill();
+              }
+            }
+          });
+          function send(msg) { child.stdin.write(JSON.stringify(msg) + '\n'); }
+          function fail(reason) { clearTimeout(timer); console.error(reason); child.kill(); process.exitCode = 1; }
+          send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'rea-ci-smoke', version: '1.0.0' } } });
+          NODE
       - name: Build a known artifact
         id: build
         run: |
