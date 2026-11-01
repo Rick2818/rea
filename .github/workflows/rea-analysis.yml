@@ -3,6 +3,8 @@ name: REA oficial - certificacion
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
   push:
     branches: [main]
     paths:
@@ -10,6 +12,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: rea-analysis-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   analyze:
@@ -19,6 +25,7 @@ jobs:
       ARTIFACT_PATH: build/rea-ci-demo
     steps:
       - name: Prepare isolated report directory
+        if: steps.queue.outputs.run == 'true'
         id: reports
         shell: bash
         run: |
@@ -27,14 +34,29 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+      - name: Check for approved scheduled work
+        id: queue
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" != "schedule" ]]; then
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          elif [[ -f .rea/approved-target.txt ]]; then
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'No approved target; scheduled cycle is a no-op.'
+            echo 'run=false' >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: steps.queue.outputs.run == 'true'
         with:
           node-version: "24.22.1"
       - name: Install official published REA 6.8.0 (not the fork source)
+        if: steps.queue.outputs.run == 'true'
         run: |
           npm install --prefix "${RUNNER_TEMP}/rea-tool" --no-audit --no-fund --ignore-scripts --save-exact rea-agents@6.8.0
           echo "${RUNNER_TEMP}/rea-tool/node_modules/.bin" >> "${GITHUB_PATH}"
       - name: Verify installed REA executable and MCP build
+        if: steps.queue.outputs.run == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -42,6 +64,7 @@ jobs:
           test -s "${RUNNER_TEMP}/rea-tool/node_modules/rea-agents/dist/mcp/main.js"
           test -s "${RUNNER_TEMP}/rea-tool/node_modules/rea-agents/dist/cli-runtime/cli.js"
       - name: MCP stdio handshake and tool discovery
+        if: steps.queue.outputs.run == 'true'
         shell: bash
         run: |
           node --input-type=module <<'NODE'
@@ -81,6 +104,7 @@ jobs:
           send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'rea-ci-smoke', version: '1.0.0' } } });
           NODE
       - name: Build a known artifact
+        if: steps.queue.outputs.run == 'true'
         id: build
         run: |
           # Replace this step with your reviewed build, keeping ARTIFACT_PATH in sync.
@@ -88,6 +112,7 @@ jobs:
           printf '%s\n' '{"name":"rea-ci-demo","version":"1.0.0","type":"module","main":"index.js"}' > build/rea-ci-demo/package.json
           printf '%s\n' 'export const message = "hello";' 'throw new Error("This artifact must not be executed.");' > build/rea-ci-demo/index.js
       - name: Analyze and retain the original exit status
+        if: steps.queue.outputs.run == 'true'
         id: analyze
         shell: bash
         env:
