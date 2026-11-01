@@ -1,5 +1,5 @@
 # Copy to .github/workflows/rea-analysis.yml on your default branch.
-name: REA nube
+name: REA oficial - certificacion
 
 on:
   workflow_dispatch:
@@ -30,9 +30,9 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24.22.1"
-      - name: Install pinned REA
+      - name: Install official published REA 6.8.0 (not the fork source)
         run: |
-          npm install --prefix "${RUNNER_TEMP}/rea-tool" --no-audit --no-fund --ignore-scripts --save-exact rea-agents@6.7.0
+          npm install --prefix "${RUNNER_TEMP}/rea-tool" --no-audit --no-fund --ignore-scripts --save-exact rea-agents@6.8.0
           echo "${RUNNER_TEMP}/rea-tool/node_modules/.bin" >> "${GITHUB_PATH}"
       - name: Verify installed REA executable and MCP build
         shell: bash
