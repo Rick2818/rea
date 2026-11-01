@@ -24,13 +24,6 @@ jobs:
     env:
       ARTIFACT_PATH: build/rea-ci-demo
     steps:
-      - name: Prepare isolated report directory
-        if: steps.queue.outputs.run == 'true'
-        id: reports
-        shell: bash
-        run: |
-          directory=$(mktemp -d "${RUNNER_TEMP:?}/rea-analysis.XXXXXX")
-          printf 'directory=%s\n' "${directory}" >> "${GITHUB_OUTPUT:?}"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
@@ -41,11 +34,25 @@ jobs:
           if [[ "${{ github.event_name }}" != "schedule" ]]; then
             echo 'run=true' >> "$GITHUB_OUTPUT"
           elif [[ -f .rea/approved-target.txt ]]; then
-            echo 'run=true' >> "$GITHUB_OUTPUT"
+            target=$(head -n 1 .rea/approved-target.txt)
+            if [[ "$target" =~ ^rea-inputs/[A-Za-z0-9_./-]+$ && "$target" != *'..'* && -d "$target" ]]; then
+              echo "ARTIFACT_PATH=$target" >> "$GITHUB_ENV"
+              echo 'run=true' >> "$GITHUB_OUTPUT"
+            else
+              echo 'Invalid approved target path' >&2
+              exit 1
+            fi
           else
             echo 'No approved target; scheduled cycle is a no-op.'
             echo 'run=false' >> "$GITHUB_OUTPUT"
           fi
+      - name: Prepare isolated report directory
+        if: steps.queue.outputs.run == 'true'
+        id: reports
+        shell: bash
+        run: |
+          directory=$(mktemp -d "${RUNNER_TEMP:?}/rea-analysis.XXXXXX")
+          printf 'directory=%s\n' "${directory}" >> "${GITHUB_OUTPUT:?}"
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         if: steps.queue.outputs.run == 'true'
         with:
@@ -104,7 +111,7 @@ jobs:
           send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'rea-ci-smoke', version: '1.0.0' } } });
           NODE
       - name: Build a known artifact
-        if: steps.queue.outputs.run == 'true'
+        if: steps.queue.outputs.run == 'true' && github.event_name != 'schedule'
         id: build
         run: |
           # Replace this step with your reviewed build, keeping ARTIFACT_PATH in sync.
